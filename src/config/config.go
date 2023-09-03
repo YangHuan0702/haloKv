@@ -6,20 +6,20 @@ import (
 )
 
 type ServerConfig struct {
-	Port int32
-	Name string
+	Port int32  `yaml:"Port"`
+	Name string `yaml:"Name"`
 }
 
 type Raft struct {
-	Servers          []string
-	ElectTime        int32
-	HeartbeatTimeOut int32
+	Servers          string `yaml:"Servers"`
+	ElectTime        int32  `yaml:"ElectTime"`
+	HeartbeatTimeOut int32  `yaml:"HeartbeatTimeOut"`
 }
 
 type Config struct {
-	ServerConfig ServerConfig `json:"ServerConfig"`
-	Raft         Raft         `json:"Raft"`
-	LogPath      string       `json:"LogPath"`
+	ServerConfig ServerConfig `yaml:"ServerConfig"`
+	Raft         Raft         `yaml:"Raft"`
+	LogPath      string       `yaml:"LogPath"`
 }
 
 func ReadConfig() Config {
@@ -29,7 +29,7 @@ func ReadConfig() Config {
 	}
 	config := Config{}
 	if err = yaml.Unmarshal(file, &config); err != nil {
-		panic("yaml Unmarshal panic~")
+		panic(err.Error())
 	}
 	return config
 }
