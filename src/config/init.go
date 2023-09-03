@@ -3,5 +3,6 @@ package config
 import "fmt"
 
 func init() {
-	fmt.Println("init config")
+	config := ReadConfig()
+	fmt.Println("init config:", config)
 }
