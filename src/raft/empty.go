@@ -13,8 +13,8 @@ type Raft struct {
 }
 
 /*
------------------------- request & response------------------------------
-*/
+* ------------------------ request & response------------------------------
+ */
 type RequestVote struct {
 	Term         int32
 	CandidateId  int
