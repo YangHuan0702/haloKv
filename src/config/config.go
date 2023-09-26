@@ -2,6 +2,7 @@ package config
 
 import (
 	"gopkg.in/yaml.v2"
+	"haloKv/src/common"
 	"os"
 )
 
@@ -23,7 +24,7 @@ type Config struct {
 }
 
 func ReadConfig() Config {
-	file, err := os.ReadFile("config/application.yml")
+	file, err := os.ReadFile(common.ConfigPath)
 	if err != nil {
 		panic("read config/application.yml configuration file panic!")
 	}
