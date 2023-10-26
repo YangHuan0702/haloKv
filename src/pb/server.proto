@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+option go_package = "haloKv/pb";
+
+
+message RequestVote {
+
+}
+
+message ResponseVote {
+
+}
+
+service RaftRpc {
+  rpc sendVoteRequest(RequestVote) returns (ResponseVote) {}
+
+}
