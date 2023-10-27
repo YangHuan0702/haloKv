@@ -11,15 +11,16 @@ type ServerConfig struct {
 	Name string `yaml:"Name"`
 }
 
-type Raft struct {
+type RaftConfig struct {
 	Servers          string `yaml:"Servers"`
-	ElectTime        int32  `yaml:"ElectTime"`
-	HeartbeatTimeOut int32  `yaml:"HeartbeatTimeOut"`
+	ElectTime        int    `yaml:"ElectTime"`
+	HeartbeatTimeOut int    `yaml:"HeartbeatTimeOut"`
+	Me               int    `yaml:"Me"`
 }
 
 type Config struct {
 	ServerConfig ServerConfig `yaml:"ServerConfig"`
-	Raft         Raft         `yaml:"Raft"`
+	Raft         RaftConfig   `yaml:"Raft"`
 	LogPath      string       `yaml:"LogPath"`
 }
 

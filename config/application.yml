@@ -3,6 +3,7 @@ ServerConfig:
   Name: Server
 Raft:
   Servers: localhost:8080,localhost:8081,localhost:8082
+  Me: 1
   ElectTime: 150
   HeartbeatTimeOut: 75
 LogPath: /tmp/log/

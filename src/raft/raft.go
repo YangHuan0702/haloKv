@@ -1,9 +1,15 @@
 package raft
 
 import (
-	"golang.org/x/net/context"
+	"context"
 	"haloKv/src/pb"
+	"log"
+	"sync"
+	"time"
 )
+
+type RpcCall struct {
+}
 
 type Raft struct {
 	CurrentTerm int32
@@ -13,17 +19,47 @@ type Raft struct {
 	LastApplied int
 
 	NextIndex  []int
-	MatchIndex []int32
+	MatchIndex []int
 
+	ElectTime        int
+	HeartbeatTimeOut int
+
+	serverMap map[int32]pb.RaftRpcClient
+
+	lock sync.Mutex
+	cv   *sync.Cond
 	pb.UnimplementedRaftRpcServer
 }
 
-func (raft *Raft) sendVoteRequest(ctx context.Context, vote *pb.RequestVote) (*pb.ResponseVote, error) {
+func (raft *Raft) sendVoteRequest(vote *pb.RequestVote) *pb.ResponseVote {
+	server := raft.serverMap[*vote.For]
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 
-	return &pb.ResponseVote{}, nil
+	r, err := server.VoteRequest(ctx, vote)
+	if err != nil {
+		log.Fatal("Request VoteRequest Fatal : {}", err)
+	}
+	return r
 }
 
-func (raft *Raft) sendAppendEntries(ctx context.Context, request *pb.RequestAppendEntries) (*pb.ResponseAppendEntries, error) {
+func (raft *Raft) sendAppendEntries(request *pb.RequestAppendEntries) *pb.ResponseAppendEntries {
+	server := raft.serverMap[*request.For]
+	ctx, cancelFunc := context.WithTimeout(context.Background(), time.Second)
+	defer cancelFunc()
 
-	return &pb.ResponseAppendEntries{}, nil
+	r, err := server.AppendEntries(ctx, request)
+	if err != nil {
+		log.Fatal("Request AppendEntries Fatal : {}", err)
+	}
+	return r
+}
+
+func (raft *Raft) VoteRequest(ctx context.Context, in *pb.RequestVote) (*pb.ResponseVote, error) {
+
+	return nil, nil
+}
+func (raft *Raft) AppendEntries(ctx context.Context, in *pb.RequestAppendEntries) (*pb.ResponseAppendEntries, error) {
+
+	return nil, nil
 }
