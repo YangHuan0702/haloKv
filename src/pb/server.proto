@@ -4,14 +4,32 @@ option go_package = "haloKv/pb";
 
 
 message RequestVote {
-
+  optional int32 Term = 1;
+  optional int32 CandidateId = 2;
+  optional int32 LastLogIndex = 3;
+  optional int32 LastLogTerm = 4;
 }
 
 message ResponseVote {
+  optional int32 Term = 1;
+  optional bool VoteGranted = 2;
+}
 
+
+message RequestAppendEntries {
+  optional int32 Term = 1;
+  optional int32 LeaderId = 2;
+  optional int32 PrevLogIndex = 3;
+  optional int32 PrevLogTerm = 4;
+  optional int32 LeaderCommit = 5;
+}
+
+message ResponseAppendEntries {
+  optional int32 Term = 1;
+  optional bool Success = 2;
 }
 
 service RaftRpc {
   rpc sendVoteRequest(RequestVote) returns (ResponseVote) {}
-
+  rpc sendAppendEntries(RequestAppendEntries) returns (ResponseAppendEntries) {}
 }
