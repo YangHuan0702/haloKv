@@ -3,9 +3,16 @@ package raft
 import (
 	"context"
 	"haloKv/src/pb"
+	rc "haloKv/src/recover"
 	"log"
 	"sync"
 	"time"
+)
+
+const (
+	LEADER    = 1
+	FOLLOWER  = 2
+	CANDIDATE = 3
 )
 
 type RpcCall struct {
@@ -14,12 +21,14 @@ type RpcCall struct {
 type Raft struct {
 	CurrentTerm int32
 	VotedFor    int
-	//log	log[]
+	log         []rc.RaftLog
 	CommitIndex int32
 	LastApplied int
 
 	NextIndex  []int
 	MatchIndex []int
+
+	State int
 
 	ElectTime        int
 	HeartbeatTimeOut int
@@ -55,10 +64,37 @@ func (raft *Raft) sendAppendEntries(request *pb.RequestAppendEntries) *pb.Respon
 	return r
 }
 
-func (raft *Raft) VoteRequest(ctx context.Context, in *pb.RequestVote) (*pb.ResponseVote, error) {
+func (raft *Raft) VoteRequest(ctx context.Context, request *pb.RequestVote) (*pb.ResponseVote, error) {
+	resp := &pb.ResponseVote{}
+	*resp.VoteGranted = false
+	*resp.Term = raft.CurrentTerm
 
-	return nil, nil
+	if raft.CurrentTerm > *request.Term {
+		return resp, nil
+	}
+
+	if *request.Term > raft.CurrentTerm {
+		raft.follower(request.GetTerm(), int(request.GetCandidateId()))
+	}
+	*resp.Term = raft.CurrentTerm
+
+	if (raft.VotedFor == -1 || raft.VotedFor == int(request.GetCandidateId())) &&
+		(len(raft.log) == 0 || request.GetPrevLogTerm() > raft.log[len(raft.log)-1].Term ||
+			(request.GetPrevLogTerm() == raft.log[len(raft.log)-1].Term && int(request.GetPrevLogIndex()) >= len(raft.log)-1)) {
+		*resp.VoteGranted = true
+		*resp.Term = raft.CurrentTerm
+		return resp, nil
+	}
+
+	return resp, nil
 }
+
+func (raft *Raft) follower(term int32, candidateId int) {
+	raft.CurrentTerm = term
+	raft.VotedFor = candidateId
+	raft.State = FOLLOWER
+}
+
 func (raft *Raft) AppendEntries(ctx context.Context, in *pb.RequestAppendEntries) (*pb.ResponseAppendEntries, error) {
 
 	return nil, nil

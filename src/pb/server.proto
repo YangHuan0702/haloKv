@@ -6,8 +6,8 @@ option go_package = "haloKv/pb";
 message RequestVote {
   optional int32 Term = 1;
   optional int32 CandidateId = 2;
-  optional int32 LastLogIndex = 3;
-  optional int32 LastLogTerm = 4;
+  optional int32 PrevLogIndex = 3;
+  optional int32 PrevLogTerm = 4;
   optional int32 For = 5;
 }
 
