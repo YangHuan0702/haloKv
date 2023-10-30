@@ -1,7 +1,6 @@
 syntax = "proto3";
 
 option go_package = "haloKv/pb";
-import "google/protobuf/struct.proto";
 
 message RequestVote {
   optional int32 Term = 1;
@@ -9,6 +8,16 @@ message RequestVote {
   optional int32 PrevLogIndex = 3;
   optional int32 PrevLogTerm = 4;
   optional int32 For = 5;
+}
+
+message Log {
+  optional string Key = 1;
+  optional string Value = 2;
+}
+
+message RaftLog {
+  optional int32 Term = 1;
+  optional Log LogEntries = 2;
 }
 
 message ResponseVote {
@@ -24,7 +33,7 @@ message RequestAppendEntries {
   optional int32 PrevLogTerm = 4;
   optional int32 LeaderCommit = 5;
   optional int32 For = 6;
-  optional google.protobuf.Struct Data = 7;
+  repeated RaftLog Logs = 7;
 }
 
 message ResponseAppendEntries {

@@ -31,6 +31,8 @@ func GetRaftInstance() *Raft {
 	raft.MatchIndex = make([]int, len(servers))
 	raft.ElectTime = raftConfig.ElectTime
 	raft.HeartbeatTimeOut = raftConfig.HeartbeatTimeOut
+	raft.State = CANDIDATE
+	raft.serverSize = len(servers)
 
 	for i, server := range servers {
 		if i == raftConfig.Me {
@@ -43,7 +45,7 @@ func GetRaftInstance() *Raft {
 			s := grpc.NewServer()
 			// 在grpc注册服务
 			pb.RegisterRaftRpcServer(s, &raft)
-
+			raft.me = i
 			if s.Serve(lis) != nil {
 				log.Printf("RPC: Server Starting Panic...")
 				return nil

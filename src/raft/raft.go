@@ -3,8 +3,9 @@ package raft
 import (
 	"context"
 	"haloKv/src/pb"
-	rc "haloKv/src/recover"
 	"log"
+	"math/rand"
+	"sort"
 	"sync"
 	"time"
 )
@@ -21,7 +22,7 @@ type RpcCall struct {
 type Raft struct {
 	CurrentTerm int32
 	VotedFor    int
-	log         []rc.RaftLog
+	log         []pb.RaftLog
 	CommitIndex int
 	LastApplied int
 
@@ -29,6 +30,12 @@ type Raft struct {
 	MatchIndex []int
 
 	State int
+
+	actionTime int64
+
+	serverSize int
+
+	me int
 
 	ElectTime        int
 	HeartbeatTimeOut int
@@ -84,13 +91,13 @@ func (raft *Raft) VoteRequest(ctx context.Context, request *pb.RequestVote) (*pb
 	*resp.Term = raft.CurrentTerm
 
 	if (raft.VotedFor == -1 || raft.VotedFor == int(request.GetCandidateId())) &&
-		(len(raft.log) == 0 || request.GetPrevLogTerm() > raft.log[len(raft.log)-1].Term ||
-			(request.GetPrevLogTerm() == raft.log[len(raft.log)-1].Term && int(request.GetPrevLogIndex()) >= len(raft.log)-1)) {
+		(len(raft.log) == 0 || request.GetPrevLogTerm() > *raft.log[len(raft.log)-1].Term ||
+			(request.GetPrevLogTerm() == *raft.log[len(raft.log)-1].Term && int(request.GetPrevLogIndex()) >= len(raft.log)-1)) {
 		*resp.VoteGranted = true
 		*resp.Term = raft.CurrentTerm
+		raft.actionTime = time.Now().Unix()
 		return resp, nil
 	}
-
 	return resp, nil
 }
 
@@ -117,10 +124,13 @@ func (raft *Raft) AppendEntries(ctx context.Context, request *pb.RequestAppendEn
 		raft.follower(request.GetTerm(), int(request.GetLeaderId()))
 	}
 
-	if len(raft.log) == 0 || int(request.GetPrevLogIndex()) > len(raft.log)-1 || raft.log[int(request.GetPrevLogIndex())].Term != request.GetPrevLogTerm() {
+	if len(raft.log) == 0 || int(request.GetPrevLogIndex()) > len(raft.log)-1 || *raft.log[int(request.GetPrevLogIndex())].Term != request.GetPrevLogTerm() {
 		return &resp, nil
 	} else {
-		raft.log = append(raft.log[:request.GetPrevLogIndex()+1], rc.RaftLog{Term: request.GetTerm(), Data: request.GetData()})
+		rlog := pb.RaftLog{}
+		*rlog.Term = request.GetTerm()
+		*rlog.LogEntries = *request.GetLogs()[0].GetLogEntries()
+		raft.log = append(raft.log[:request.GetPrevLogIndex()+1], rlog)
 	}
 
 	if int(request.GetLeaderCommit()) > raft.CommitIndex {
@@ -129,6 +139,7 @@ func (raft *Raft) AppendEntries(ctx context.Context, request *pb.RequestAppendEn
 		raft.startWriteStatus()
 	}
 
+	raft.actionTime = time.Now().Unix()
 	*resp.Success = true
 	return &resp, nil
 }
@@ -145,12 +156,201 @@ func (raft *Raft) writeStatus() {
 			raft.cv.Wait()
 		}
 		for i := raft.LastApplied; i <= raft.CommitIndex; i++ {
-			//TODO Write To Map
+			//TODO: Write To Map
 		}
 		raft.LastApplied = raft.CommitIndex
 		raft.WriteStatus = false
 		raft.lock.Unlock()
 	}
+}
+
+const randomTimeOut = 150
+
+func (raft *Raft) electLeader() {
+	sleepTime := time.Duration(int64(raft.ElectTime) + rand.Int63n(randomTimeOut))
+	startTime := time.Now().Unix()
+	for {
+		time.Sleep(sleepTime * time.Millisecond)
+		raft.lock.Lock()
+
+		lastTime := startTime
+		startTime := time.Now().Unix()
+		predictTime := raft.actionTime + int64(raft.ElectTime) + rand.Int63n(randomTimeOut)
+		diffTime := predictTime - startTime
+		if raft.actionTime < lastTime || diffTime <= 0 {
+			if raft.State != LEADER {
+				// start election
+				raft.kickoffLeaderElection()
+			}
+			sleepTime = time.Duration(int64(raft.ElectTime) + rand.Int63n(randomTimeOut))
+		} else {
+			sleepTime = time.Duration(diffTime)
+		}
+		raft.lock.Unlock()
+	}
+}
+
+func (raft *Raft) kickoffLeaderElection() {
+	raft.candidate()
+	cond := sync.NewCond(&raft.lock)
+	count, electCount := 1, 1
+
+	prevIndex := len(raft.log) - 1
+	var prevTerm int32 = -1
+	if len(raft.log) > 0 {
+		prevTerm = *raft.log[prevIndex].Term
+	}
+
+	for i := 0; i < raft.serverSize; i++ {
+		if i == raft.me {
+			continue
+		}
+
+		go func(term int32, targetServer int, prevIndex int, prevTerm int32, candidateId int) {
+			request := pb.RequestVote{}
+			*request.Term = term
+			*request.CandidateId = int32(candidateId)
+			*request.PrevLogIndex = int32(prevIndex)
+			*request.PrevLogTerm = prevTerm
+			*request.For = int32(targetServer)
+
+			raft.lock.Lock()
+			defer raft.lock.Unlock()
+
+			resp := raft.sendVoteRequest(&request)
+
+			count++
+			if resp.GetVoteGranted() && resp.GetTerm() == raft.CurrentTerm {
+				electCount++
+			} else if resp.GetTerm() > raft.CurrentTerm {
+				raft.follower(resp.GetTerm(), targetServer)
+			}
+			cond.Broadcast()
+		}(raft.CurrentTerm, i, prevIndex, prevTerm, raft.me)
+	}
+
+	go func() {
+		raft.lock.Lock()
+		defer raft.lock.Unlock()
+
+		for raft.State == CANDIDATE && count < raft.serverSize && electCount <= raft.serverSize/2 {
+			cond.Wait()
+		}
+
+		if raft.State == CANDIDATE && electCount > raft.serverSize/2 {
+			raft.leader()
+			go raft.leaderSendHeartbeat()
+		}
+	}()
+
+}
+
+func Max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func (raft *Raft) leaderSendHeartbeat() {
+	for {
+		raft.lock.Lock()
+		if raft.State != LEADER {
+			raft.lock.Unlock()
+			return
+		}
+
+		for i := 0; i < raft.serverSize; i++ {
+			if i == raft.me {
+				continue
+			}
+			prevLogIndex := Max(Min(raft.NextIndex[i]-1, len(raft.log)-1), -1)
+			var prevLogTerm int32 = -1
+			if prevLogIndex >= 0 {
+				prevLogTerm = *raft.log[prevLogIndex].Term
+			}
+			logs := make([]*pb.RaftLog, 0)
+			if len(raft.log) > prevLogIndex+1 {
+				logs = append(logs, &raft.log[prevLogIndex+1])
+			}
+
+			go func(i int, term int32, leaderId int, commitIndex int, prevLogIndex int, prevLogTerm int32, rlogs []*pb.RaftLog) {
+				reqeust := pb.RequestAppendEntries{}
+				*reqeust.Term = term
+				*reqeust.LeaderId = int32(leaderId)
+				*reqeust.PrevLogIndex = int32(prevLogIndex)
+				*reqeust.PrevLogTerm = prevLogTerm
+				*reqeust.LeaderCommit = int32(commitIndex)
+				*reqeust.For = int32(i)
+				reqeust.Logs = rlogs
+
+				raft.lock.Lock()
+				defer raft.lock.Unlock()
+				resp := raft.sendAppendEntries(&reqeust)
+				if resp.GetTerm() > raft.CurrentTerm {
+					raft.follower(*resp.Term, i)
+					return
+				}
+
+				if term != raft.CurrentTerm || *resp.Term != raft.CurrentTerm {
+					return
+				}
+
+				if len(rlogs) > 0 {
+					if !*resp.Success && raft.NextIndex[i] > 0 {
+						if *resp.FirstIndex >= 0 && *raft.log[*resp.FirstIndex].Term == *resp.FirstTerm {
+							raft.NextIndex[i] = int(*resp.FirstIndex + 1)
+						} else {
+							raft.NextIndex[i] = int(*resp.FirstIndex - 1)
+						}
+					}
+					if *resp.Success {
+						if raft.NextIndex[i] <= 0 {
+							raft.NextIndex[i] = len(rlogs)
+							raft.MatchIndex[i] = len(rlogs) - 1
+						} else {
+							raft.NextIndex[i] = prevLogIndex + len(rlogs) + 1
+							raft.MatchIndex[i] = raft.NextIndex[i] - 1
+						}
+					}
+
+					newMatchs := make([]int, raft.serverSize)
+					copy(newMatchs, raft.MatchIndex)
+					sort.Ints(newMatchs)
+					for target := (raft.serverSize - 1) / 2; target > 0 && newMatchs[target] > raft.CommitIndex; target-- {
+						// 如果leader提交了一个commitIndex的日志然后宕机了，后来的leader在这个位置上拥有更到的term，就会出现问题
+						if newMatchs[target] <= len(raft.log)-1 && *raft.log[newMatchs[target]].Term == raft.CurrentTerm {
+							raft.CommitIndex = newMatchs[target]
+							// TODO write to the map
+							break
+						}
+					}
+				}
+
+			}(i, raft.CurrentTerm, raft.me, raft.CommitIndex, prevLogIndex, prevLogTerm, logs)
+		}
+		raft.lock.Unlock()
+		time.Sleep(time.Duration(raft.HeartbeatTimeOut) * time.Millisecond)
+	}
+}
+
+func (raft *Raft) leader() {
+	raft.State = LEADER
+	for i := 0; i < raft.serverSize; i++ {
+		if i != raft.me {
+			raft.MatchIndex[i] = -1
+		}
+		raft.NextIndex[i] = len(raft.log) - 1
+	}
+	raft.actionTime = time.Now().Unix()
+}
+
+func (raft *Raft) candidate() {
+	raft.State = CANDIDATE
+	raft.CurrentTerm += 1
+	raft.VotedFor = -1
+	// 这里设置时间的意义是保障选举发生的频率
+	raft.actionTime = time.Now().Unix()
 }
 
 func Min(a, b int) int {
