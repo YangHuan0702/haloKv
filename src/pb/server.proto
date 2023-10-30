@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 option go_package = "haloKv/pb";
-
+import "google/protobuf/struct.proto";
 
 message RequestVote {
   optional int32 Term = 1;
@@ -24,11 +24,14 @@ message RequestAppendEntries {
   optional int32 PrevLogTerm = 4;
   optional int32 LeaderCommit = 5;
   optional int32 For = 6;
+  optional google.protobuf.Struct Data = 7;
 }
 
 message ResponseAppendEntries {
   optional int32 Term = 1;
   optional bool Success = 2;
+  optional int32 FirstIndex = 3;
+  optional int32 FirstTerm = 4;
 }
 
 service RaftRpc {

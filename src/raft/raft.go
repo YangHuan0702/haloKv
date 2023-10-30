@@ -65,6 +65,9 @@ func (raft *Raft) sendAppendEntries(request *pb.RequestAppendEntries) *pb.Respon
 }
 
 func (raft *Raft) VoteRequest(ctx context.Context, request *pb.RequestVote) (*pb.ResponseVote, error) {
+	raft.lock.Lock()
+	defer raft.lock.Unlock()
+
 	resp := &pb.ResponseVote{}
 	*resp.VoteGranted = false
 	*resp.Term = raft.CurrentTerm
@@ -95,7 +98,23 @@ func (raft *Raft) follower(term int32, candidateId int) {
 	raft.State = FOLLOWER
 }
 
-func (raft *Raft) AppendEntries(ctx context.Context, in *pb.RequestAppendEntries) (*pb.ResponseAppendEntries, error) {
+func (raft *Raft) AppendEntries(ctx context.Context, request *pb.RequestAppendEntries) (*pb.ResponseAppendEntries, error) {
+	raft.lock.Lock()
+	defer raft.lock.Unlock()
 
-	return nil, nil
+	resp := pb.ResponseAppendEntries{}
+	*resp.Success = false
+	*resp.Term = raft.CurrentTerm
+
+	if request.GetTerm() < raft.CurrentTerm {
+		return &resp, nil
+	}
+
+	if len(raft.log) == 0 || int(request.GetPrevLogIndex()) > len(raft.log)-1 || raft.log[int(request.GetPrevLogIndex())].Term != request.GetPrevLogTerm() {
+		return &resp, nil
+	} else {
+		raft.log = append(raft.log[:request.GetPrevLogIndex()+1], rc.RaftLog{Term: request.GetTerm(), Data: request.GetData()})
+	}
+	*resp.Success = true
+	return &resp, nil
 }
