@@ -21,9 +21,10 @@ func GetRaftInstance() *Raft {
 	raft.CurrentTerm = -1
 	raft.VotedFor = -1
 	raft.CommitIndex = -1
-	raft.LastApplied = -1
+	raft.LastApplied = 0
 	raft.lock = sync.Mutex{}
 	raft.cv = sync.NewCond(&raft.lock)
+	raft.WriteStatus = false
 
 	raft.NextIndex = make([]int, len(servers))
 	raft.serverMap = make(map[int32]pb.RaftRpcClient)
