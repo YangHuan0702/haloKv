@@ -22,7 +22,7 @@ type RpcCall struct {
 type Raft struct {
 	CurrentTerm int32
 	VotedFor    int
-	log         []pb.RaftLog
+	log         []*pb.RaftLog
 	CommitIndex int
 	LastApplied int
 
@@ -35,7 +35,8 @@ type Raft struct {
 
 	serverSize int
 
-	me int
+	mapChan *chan pb.Log
+	me      int
 
 	ElectTime        int
 	HeartbeatTimeOut int
@@ -73,7 +74,7 @@ func (raft *Raft) sendAppendEntries(request *pb.RequestAppendEntries) *pb.Respon
 	return r
 }
 
-func (raft *Raft) VoteRequest(ctx context.Context, request *pb.RequestVote) (*pb.ResponseVote, error) {
+func (raft *Raft) VoteRequest(_ context.Context, request *pb.RequestVote) (*pb.ResponseVote, error) {
 	raft.lock.Lock()
 	defer raft.lock.Unlock()
 
@@ -107,7 +108,7 @@ func (raft *Raft) follower(term int32, candidateId int) {
 	raft.State = FOLLOWER
 }
 
-func (raft *Raft) AppendEntries(ctx context.Context, request *pb.RequestAppendEntries) (*pb.ResponseAppendEntries, error) {
+func (raft *Raft) AppendEntries(_ context.Context, request *pb.RequestAppendEntries) (*pb.ResponseAppendEntries, error) {
 	raft.lock.Lock()
 	defer raft.lock.Unlock()
 
@@ -127,7 +128,7 @@ func (raft *Raft) AppendEntries(ctx context.Context, request *pb.RequestAppendEn
 	if len(raft.log) == 0 || int(request.GetPrevLogIndex()) > len(raft.log)-1 || *raft.log[int(request.GetPrevLogIndex())].Term != request.GetPrevLogTerm() {
 		return &resp, nil
 	} else {
-		rlog := pb.RaftLog{}
+		rlog := &pb.RaftLog{}
 		*rlog.Term = request.GetTerm()
 		*rlog.LogEntries = *request.GetLogs()[0].GetLogEntries()
 		raft.log = append(raft.log[:request.GetPrevLogIndex()+1], rlog)
@@ -155,7 +156,7 @@ func (raft *Raft) writeStatus() {
 			raft.cv.Wait()
 		}
 		for i := raft.LastApplied; i <= raft.CommitIndex; i++ {
-			//TODO: Write To Map
+			*raft.mapChan <- *raft.log[i].GetLogEntries()
 		}
 		raft.LastApplied = raft.CommitIndex
 		raft.WriteStatus = false
@@ -270,7 +271,7 @@ func (raft *Raft) leaderSendHeartbeat() {
 			}
 			logs := make([]*pb.RaftLog, 0)
 			if len(raft.log) > prevLogIndex+1 {
-				logs = append(logs, &raft.log[prevLogIndex+1])
+				logs = append(logs, raft.log[prevLogIndex+1])
 			}
 
 			go func(i int, term int32, leaderId int, commitIndex int, prevLogIndex int, prevLogTerm int32, rlogs []*pb.RaftLog) {
@@ -357,4 +358,12 @@ func Min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (raft *Raft) StartRaftServer(mapChan *chan pb.Log) {
+	raft.mapChan = mapChan
+
+	go raft.electLeader()
+
+	go raft.writeStatus()
 }
