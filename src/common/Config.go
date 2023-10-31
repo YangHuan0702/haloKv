@@ -1,3 +1,3 @@
 package common
 
-const ConfigPath string = "configFilePath"
+const ConfigPath string = "config/application.yml"
