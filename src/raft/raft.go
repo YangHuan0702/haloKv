@@ -135,7 +135,6 @@ func (raft *Raft) AppendEntries(ctx context.Context, request *pb.RequestAppendEn
 
 	if int(request.GetLeaderCommit()) > raft.CommitIndex {
 		raft.CommitIndex = Min(len(raft.log)-1, int(request.GetLeaderCommit()))
-		// TODO write to Map & Log
 		raft.startWriteStatus()
 	}
 
@@ -321,7 +320,7 @@ func (raft *Raft) leaderSendHeartbeat() {
 						// 如果leader提交了一个commitIndex的日志然后宕机了，后来的leader在这个位置上拥有更到的term，就会出现问题
 						if newMatchs[target] <= len(raft.log)-1 && *raft.log[newMatchs[target]].Term == raft.CurrentTerm {
 							raft.CommitIndex = newMatchs[target]
-							// TODO write to the map
+							raft.startWriteStatus()
 							break
 						}
 					}
