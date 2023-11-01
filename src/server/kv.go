@@ -2,6 +2,7 @@ package server
 
 import (
 	"haloKv/src/pb"
+	"haloKv/src/raft"
 	"sync"
 	"time"
 )
@@ -14,6 +15,8 @@ type Server struct {
 	Lock    sync.Mutex
 	Conde   *sync.Cond
 	LogChan chan pb.Log
+
+	rf *raft.Raft
 }
 
 func (serv *Server) WriteToMap() {

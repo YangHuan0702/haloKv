@@ -50,6 +50,19 @@ type Raft struct {
 	pb.UnimplementedRaftRpcServer
 }
 
+func (raft *Raft) PutLog(l *pb.Log) bool {
+	raft.lock.Lock()
+	defer raft.lock.Unlock()
+	if raft.State == LEADER {
+		lg := pb.RaftLog{}
+		*lg.Term = raft.CurrentTerm
+		lg.LogEntries = l
+		raft.log = append(raft.log, &lg)
+		return true
+	}
+	return false
+}
+
 func (raft *Raft) sendVoteRequest(vote *pb.RequestVote) *pb.ResponseVote {
 	server := raft.serverMap[*vote.For]
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -360,7 +373,8 @@ func Min(a, b int) int {
 	return b
 }
 
-func (raft *Raft) StartRaftServer() {
+func (raft *Raft) StartRaftServer(mapChan *chan pb.Log) {
+	raft.mapChan = mapChan
 
 	go raft.electLeader()
 

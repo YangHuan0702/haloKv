@@ -12,7 +12,7 @@ import (
 	"sync"
 )
 
-func GetRaftInstance(mapChan *chan pb.Log, c *config.Config) *Raft {
+func GetRaftInstance(c *config.Config) *Raft {
 	raftConfig := c.Raft
 	servers := strings.Split(raftConfig.Servers, ",")
 
@@ -24,7 +24,6 @@ func GetRaftInstance(mapChan *chan pb.Log, c *config.Config) *Raft {
 	raft.lock = sync.Mutex{}
 	raft.cv = sync.NewCond(&raft.lock)
 	raft.WriteStatus = false
-	raft.mapChan = mapChan
 
 	raft.NextIndex = make([]int, len(servers))
 	raft.serverMap = make(map[int32]pb.RaftRpcClient)
