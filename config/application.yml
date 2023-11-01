@@ -1,5 +1,5 @@
 ServerConfig:
-  Port: 8080
+  Port: 8090
   Name: Server
 Raft:
   Servers: localhost:8080,localhost:8081,localhost:8082

@@ -12,8 +12,7 @@ import (
 	"sync"
 )
 
-func GetRaftInstance(mapChan *chan pb.Log) *Raft {
-	c := config.ReadConfig()
+func GetRaftInstance(mapChan *chan pb.Log, c *config.Config) *Raft {
 	raftConfig := c.Raft
 	servers := strings.Split(raftConfig.Servers, ",")
 
