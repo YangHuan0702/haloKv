@@ -360,8 +360,7 @@ func Min(a, b int) int {
 	return b
 }
 
-func (raft *Raft) StartRaftServer(mapChan *chan pb.Log) {
-	raft.mapChan = mapChan
+func (raft *Raft) StartRaftServer() {
 
 	go raft.electLeader()
 

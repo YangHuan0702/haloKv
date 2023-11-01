@@ -1,8 +1,14 @@
 package main
 
-import "fmt"
 import _ "haloKv/src/config"
+import "haloKv/src/raft"
+import s "haloKv/src/server"
 
 func main() {
-	fmt.Println("Hello HaloKv !")
+	serv := s.GetServer()
+
+	raftServer := raft.GetRaftInstance(&serv.LogChan)
+
+	raftServer.StartRaftServer()
+
 }

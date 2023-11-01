@@ -48,5 +48,5 @@ func (serv *Server) toWrite() {
 		serv.data[l.GetKey()] = l.GetValue()
 	}
 
-	//TODO : clear serv.LogBuffer
+	serv.LogBuffer = serv.LogBuffer[0:0]
 }
